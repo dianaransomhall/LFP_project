@@ -74,10 +74,12 @@ class ChemicalDataset:
         self.meta_info_loaded = meta_info
         self.load_status = dict()
         self.load_status['dataframes'] = dict()
-        for name, shape in contents['dataframes'].items():
+        #for name, shape in contents['dataframes'].items():
+        for name, shape in contents.items():
             df = pd.read_csv(os.path.join(load_dir, '{}.csv'.format(name)))
             self.add_dataframe(name, df)
             self.load_status['dataframes'][name] = df.shape == shape
+
         self.load_status['datadicts'] = dict()
         for name, length in contents['datadicts'].items():
             with open(os.path.join(load_dir, '{}.json'.format(name)), 'r') as f:

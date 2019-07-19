@@ -1,6 +1,5 @@
 # Function to read in mcd files to python
 # import necessary libraries
-
 import neuroshare as ns
 import os
 import statistics
@@ -174,6 +173,7 @@ def get_spikes_wrapper(chem="bic", save=True):
     #dom_spk.keys()
     #dom_spk['20608_DA_FPSPK'].keys()
     # dom_spk['20608_DA_FPSPK']['14']
+    # get
 
     if chem=="bic":
         bic_spk = get_spikes(chem)
