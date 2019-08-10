@@ -5,6 +5,9 @@ import json
 import time
 
 
+
+
+
 class ChemicalDataset:
     def __init__(self, chemical_name):
         self.chemical_name = chemical_name
@@ -61,12 +64,18 @@ class ChemicalDataset:
         :param directory:
         :return: status code
         """
+        #
+        # directory = "/Users/dh2744/Dropbox/Documents/Software/Python/LFP/LFP_project/saved_data"
 
         if len(self._dataframes) > 0:
             return -1
         load_dir = os.path.join(directory, self.chemical_name)
         with open(os.path.join(load_dir, 'contents.json'), 'r') as f:
             contents = json.loads(f.read())
+        if 'dataframes' not in contents:
+            contents['dataframes'] = dict(contents)
+            del contents['dataframes']
+            contents['datadicts'] = dict()
         with open(os.path.join(load_dir, 'meta.json'), 'r') as f:
             meta_info = json.loads(f.read())
         if self.chemical_name != meta_info.get("chemical_name"):
@@ -74,11 +83,13 @@ class ChemicalDataset:
         self.meta_info_loaded = meta_info
         self.load_status = dict()
         self.load_status['dataframes'] = dict()
-        #for name, shape in contents['dataframes'].items():
-        for name, shape in contents.items():
+        for name, shape in contents['dataframes'].items():
+        #for name, shape in contents.items():
+        #for name in contents['dataframes']:
+            print("name "+ name )
             df = pd.read_csv(os.path.join(load_dir, '{}.csv'.format(name)))
             self.add_dataframe(name, df)
-            self.load_status['dataframes'][name] = df.shape == shape
+            #self.load_status['dataframes'][name] = df.shape == shape
 
         self.load_status['datadicts'] = dict()
         for name, length in contents['datadicts'].items():
@@ -97,6 +108,9 @@ class ChemicalDataset:
         :return: status code
         """
         return self._dataframes.get(name)
+
+    def list_dataframes(self):
+        return list(self._dataframes.keys())
 
     def add_dataframe(self,
                          name,  # type: AnyStr

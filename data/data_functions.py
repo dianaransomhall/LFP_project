@@ -10,6 +10,7 @@ import scipy as sp
 import math
 import decimal
 from scipy import fftpack, signal, stats
+from scipy.signal import kaiserord, lfilter, firwin, freqz, butter
 from scipy.fftpack import rfft, irfft, fftfreq
 import matplotlib
 import matplotlib.pyplot as plt
@@ -23,6 +24,8 @@ import pandas as pd
 
 
 def get_fft( curData, band="alpha"  ):
+
+
 
     want_simple_example = False
     if want_simple_example:
@@ -77,10 +80,10 @@ def get_fft( curData, band="alpha"  ):
     #end of simple example
 
     ind_delta = [1,2,3, 4 ]
-    ind_theta = [4, 5,6,7, 8]
-    ind_alpha = [8,9,10,11,12,13]
-    ind_beta = np.array(range(14,31))
-    ind_gamma = np.array(range(30, 50))
+    ind_theta = [5,6,7, 8]
+    ind_alpha = [9,10,11,12,13]
+    ind_beta = np.array(range(14,30))
+    ind_gamma = np.array(range(31, 50))
 
     if band=="delta":
         ind_want=ind_delta
@@ -105,6 +108,9 @@ def get_fft( curData, band="alpha"  ):
 
 
     #do fft
+
+    #August 10, 2019, down sample 25k/sec to 1k/sec
+
     # run fft on data applied to kaiser window
     fft_resp = fftpack.fft(curData)
     # make a set of indicators for band of interest
@@ -278,28 +284,91 @@ def MCD_read(MCDFilePath):
         channelNum = channelName.split(" ")[2]
 
         # store data with name in the dictionary
-        data[channelName] = np.array(data1)
+        data2 = np.array(data1)
 
         temp_data_fft = np.zeros(shape=(math.floor(max(times)), 50))
         sec = 1
         totalSec = math.floor(max(times))
+
+        # August 10, 2019 downsample to 1k/sec from 25k/sec
+        data3 = data2[0:(totalSec*25000)] # remove tail partial second
+
+        # August 10, 2019 low pass FIR filter to eliminate aliasing
+        sample_rate = 25000
+        # The Nyquist rate of the signal.
+        nyq_rate = sample_rate / 2.0
+
+        # The desired width of the transition from pass to stop,
+        # relative to the Nyquist rate.  We'll design the filter
+        # with a 5 Hz transition width.
+        width = 5.0 / nyq_rate
+
+        # The desired attenuation in the stop band, in dB.
+        ripple_db = 60.0
+
+        # Compute the order and Kaiser parameter for the FIR filter.
+        N, beta = kaiserord(ripple_db, width)
+
+        # The cutoff frequency of the filter.
+        cutoff_hz = 200.0
+
+        # Use firwin with a Kaiser window to create a lowpass FIR filter.
+        taps = firwin(N, cutoff_hz / nyq_rate, window=('kaiser', beta))
+
+        # Use lfilter to filter x with the FIR filter.
+        data4 = lfilter(taps, 1.0, data3)
+
+
+        #down sample to 1000 samples/sec
+        data[channelName] = signal.resample(data4,
+                                        num=(1000*totalSec),
+                                        t=None,
+                                        axis=0,
+                                        window=None)
+
+
         #make an empty data frame
         fft_r = pd.DataFrame( 0,
                            index=np.arange(totalSec )  ,
                            columns=('delta', 'theta', 'alpha', 'beta', 'gamma'))
         # fft_r.loc[:,"alpha" ], fft_r.loc[1,:]
 
-        for sec in range(1, totalSec ):
-            # sec = 1
-            fs = 25000;
-            beta=0.5 # default in matlab documentation
-            w_kaiser = signal.get_window(window=('kaiser', beta) , Nx=fs, fftbins=False)
+        iterations = np.arange(2, totalSec, 0.5)
+        for sec in iterations:
+
+            fs = 1000;
 
 
+            #August 10, 2019: move along the signal in 0.5s increments
+            # take 2 full seconds of data
+            start_signal = int((sec-1.5)*fs)
+            end_signal = int((sec+0.5)*fs)
+            curData_temp = data[channelName][start_signal:end_signal ]
 
-            curData_temp = data[channelName][(sec-1)*fs: sec*fs ]
-            # data1[(sec - 1) * fs + 1:sec * fs]
+            beta = 0.5  # default in matlab documentation
+            w_kaiser = signal.get_window(window=('kaiser', beta), Nx=2*fs, fftbins=False)
+
             curData = w_kaiser * curData_temp; # element wise operation
+
+            #band pass filter
+            order=2000 #order of filter is same as number of obs that go into filter
+            def butter_bandpass(lowcut, highcut, fs, order=order):
+                nyq = 0.5 * fs
+                low = lowcut / nyq
+                high = highcut / nyq
+                b, a = butter(order, [low, high], btype='band')
+                return b, a
+
+            def butter_bandpass_filter(data, lowcut, highcut, fs, order=order):
+                b, a = butter_bandpass(lowcut, highcut, fs, order=order)
+                y = lfilter(b, a, data)
+                return y
+
+            #sample rate and desired cutoff frequencies in Hz
+            lowcut = 1
+            highcut = 4
+            y = butter_bandpass_filter(curData, lowcut = lowcut,
+                                       highcut = highcut, fs=1000 )
 
             band_want = "delta"
             power_delta = get_fft(curData, band_want)
@@ -348,6 +417,14 @@ def get_files(chem="bic"):
         path = '/Volumes/BACKUP/EXTRAP/FP_SPIKE/DOM'
     elif chem=="h2o":
         path = '/Volumes/BACKUP/EXTRAP/FP_SPIKE/H2O'
+    elif chem=="per25":
+        path = '/Volumes/BACKUP/EXTRAP/FP_SPIKE/PER25'
+    elif chem=="per50":
+        path = '/Volumes/BACKUP/EXTRAP/FP_SPIKE/PER50'
+    elif chem=="lin1":
+        path = '/Volumes/BACKUP/EXTRAP/FP_SPIKE/LIN1'
+    elif chem=="lin10":
+        path = '/Volumes/BACKUP/EXTRAP/FP_SPIKE/LIN10'
 
     files = []
     # r=root, d=directories, f = files
