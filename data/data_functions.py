@@ -18,6 +18,7 @@ import pandas as pd
 
 
 
+
 #MCDFolderPath = "/Volumes/BACKUP/EXTRAP/FP_SPIKE"
 #MCDFilePath = "/Volumes/BACKUP/EXTRAP/FP_SPIKE/ACE/June_04_2014_20613_ACE/060414_20613_ACE_FPSPK.mcd"
 #MCDexampleFile = "/Users/dh2744/Dropbox/Documents/Software/Python/LFP_project/nsMCDLibrary_MacOSX_3.7b/ExampleMCD/NeuroshareExample.mcd"
@@ -81,8 +82,8 @@ def get_fft( curData, band="alpha"  ):
 
     ind_delta = [1,2,3, 4 ]
     ind_theta = [5,6,7, 8]
-    ind_alpha = [9,10,11,12,13]
-    ind_beta = np.array(range(14,30))
+    ind_alpha = [9,10,11,12,14]
+    ind_beta = np.array(range( 15,30 ))
     ind_gamma = np.array(range(31, 50))
 
     if band=="delta":
@@ -225,7 +226,6 @@ def get_spikes_wrapper(chem="bic", save=True):
 
 def MCD_read(MCDFilePath):
 
-
     # open file using the neuroshare bindings
     fd = ns.File(MCDFilePath)
 
@@ -329,11 +329,11 @@ def MCD_read(MCDFilePath):
 
         #make an empty data frame
         fft_r = pd.DataFrame( 0,
-                           index=np.arange(totalSec )  ,
+                           index=np.arange(totalSec*2 )  ,
                            columns=('delta', 'theta', 'alpha', 'beta', 'gamma'))
         # fft_r.loc[:,"alpha" ], fft_r.loc[1,:]
 
-        iterations = np.arange(2, totalSec, 0.5)
+        iterations = np.arange(1, totalSec, 0.5)
         for sec in iterations:
 
             fs = 1000;
@@ -341,54 +341,65 @@ def MCD_read(MCDFilePath):
 
             #August 10, 2019: move along the signal in 0.5s increments
             # take 2 full seconds of data
-            start_signal = int((sec-1.5)*fs)
-            end_signal = int((sec+0.5)*fs)
+            start_signal = int((sec-1)*fs)
+            end_signal = int((sec)*fs)
             curData_temp = data[channelName][start_signal:end_signal ]
 
             beta = 0.5  # default in matlab documentation
-            w_kaiser = signal.get_window(window=('kaiser', beta), Nx=2*fs, fftbins=False)
+            w_kaiser = signal.get_window(window=('kaiser', beta), Nx=fs, fftbins=False)
 
             curData = w_kaiser * curData_temp; # element wise operation
 
             #band pass filter
-            order=2000 #order of filter is same as number of obs that go into filter
+            # she would use firwin to create the filter, convolve will take the filter
+            order=3 #order of filter is same as number of obs that go into filter
             def butter_bandpass(lowcut, highcut, fs, order=order):
                 nyq = 0.5 * fs
                 low = lowcut / nyq
                 high = highcut / nyq
-                b, a = butter(order, [low, high], btype='band')
+                b, a = signal.butter(N=order, Wn=[low, high], btype='bandpass')
                 return b, a
 
             def butter_bandpass_filter(data, lowcut, highcut, fs, order=order):
+                # b in coming out nan, a is fine
                 b, a = butter_bandpass(lowcut, highcut, fs, order=order)
                 y = lfilter(b, a, data)
                 return y
 
             #sample rate and desired cutoff frequencies in Hz
-            lowcut = 1
-            highcut = 4
-            y = butter_bandpass_filter(curData, lowcut = lowcut,
-                                       highcut = highcut, fs=1000 )
-
             band_want = "delta"
-            power_delta = get_fft(curData, band_want)
-            fft_r.loc[sec, "delta"] = power_delta
+            lowcut = 1; highcut = 4
+            y = butter_bandpass_filter(curData, lowcut = lowcut, highcut = highcut, fs=1000 )
+            power_delta = get_fft(y, band_want)
+            fft_r.loc[sec*2, "delta"] = power_delta
 
             band_want = "theta"
+            lowcut = 5
+            highcut = 8
+            y = butter_bandpass_filter(curData, lowcut=lowcut, highcut=highcut, fs=1000)
             power_theta = get_fft(curData, band_want)
-            fft_r.loc[sec, "theta"] = power_theta
+            fft_r.loc[sec*2, "theta"] = power_theta
 
             band_want = "alpha"
+            lowcut = 9
+            highcut = 14
+            y = butter_bandpass_filter(curData, lowcut=lowcut, highcut=highcut, fs=1000)
             power_alpha = get_fft(curData, band_want)
-            fft_r.loc[sec, "alpha"] = power_alpha
+            fft_r.loc[sec*2, "alpha"] = power_alpha
 
             band_want = "beta"
+            lowcut = 15
+            highcut = 30
+            y = butter_bandpass_filter(curData, lowcut=lowcut, highcut=highcut, fs=1000)
             power_beta = get_fft(curData, band_want)
-            fft_r.loc[sec, "beta"] = power_beta
+            fft_r.loc[sec*2, "beta"] = power_beta
 
             band_want = "gamma"
+            lowcut = 31
+            highcut = 50
+            y = butter_bandpass_filter(curData, lowcut=lowcut, highcut=highcut, fs=1000)
             power_gamma = get_fft(curData, band_want)
-            fft_r.loc[sec, "gamma"] = power_gamma
+            fft_r.loc[sec*2, "gamma"] = power_gamma
 
         #end of for loop
 
